@@ -7,12 +7,16 @@ export interface BuildOptions {
 	output: string;
 	neighbors: number;
 	minDist: number;
+	includeEmbeddings: boolean;
 }
 
 interface EmbeddingEntry {
 	url: string;
+	number?: number;
 	title: string;
 	body: string;
+	state?: string;
+	type?: string;
 	embedding: number[];
 }
 
@@ -23,8 +27,12 @@ interface Point {
 	y3d: number;
 	z3d: number;
 	title: string;
+	number?: number;
 	url: string;
 	body: string;
+	state?: string;
+	type?: string;
+	embedding?: number[];
 }
 
 export function build(options: BuildOptions): void {
@@ -93,8 +101,12 @@ export function build(options: BuildOptions): void {
 			y3d: (coord3d[1] - minY3) / rangeY3,
 			z3d: (coord3d[2] - minZ3) / rangeZ3,
 			title: entry.title || "",
+			number: entry.number,
 			url: entry.url || "",
 			body: entry.body || "",
+			state: entry.state,
+			type: entry.type,
+			embedding: options.includeEmbeddings ? entry.embedding : undefined,
 		};
 	});
 
@@ -115,7 +127,7 @@ function generateHtml(dataJson: string): string {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Doppelgangers - PR Triage</title>
+    <title>Doppelgangers - Issue & PR Triage</title>
     <style>
       :root {
         color-scheme: light dark;
@@ -126,6 +138,8 @@ function generateHtml(dataJson: string): string {
         --muted: #94a3b8;
         --accent: #38bdf8;
         --point: #e2e8f0;
+        --point-open: #6ee7b7;
+        --point-closed: #a78bfa;
         --selected: #f59e0b;
       }
       body {
@@ -157,24 +171,24 @@ function generateHtml(dataJson: string): string {
         position: absolute;
         top: 12px;
         left: 12px;
-        background: rgba(17, 24, 39, 0.8);
-        padding: 8px 12px;
+        background: rgba(17, 24, 39, 0.9);
+        padding: 10px 14px;
         border-radius: 8px;
         font-size: 12px;
-        line-height: 1.4;
+        line-height: 1.5;
         color: var(--muted);
       }
       #hud-row {
         display: flex;
         align-items: center;
         gap: 8px;
-        margin-bottom: 6px;
+        margin-bottom: 8px;
       }
       #hud-mode {
         font-weight: 600;
         color: var(--text);
       }
-      #toggle-mode {
+      .hud-btn {
         background: transparent;
         color: var(--text);
         border: 1px solid rgba(148, 163, 184, 0.4);
@@ -183,20 +197,96 @@ function generateHtml(dataJson: string): string {
         font-size: 11px;
         cursor: pointer;
       }
-      #toggle-mode:hover {
+      .hud-btn:hover {
         border-color: var(--accent);
         color: var(--accent);
       }
+      #filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 12px;
+        margin-bottom: 8px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+      }
+      #filters label {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        cursor: pointer;
+        font-size: 11px;
+      }
+      #filters input[type="checkbox"] {
+        margin: 0;
+      }
+      #search-wrap {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 8px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+      }
+      #search-input {
+        flex: 1;
+        background: rgba(15, 23, 42, 0.6);
+        border: 1px solid rgba(148, 163, 184, 0.3);
+        border-radius: 4px;
+        padding: 4px 8px;
+        color: var(--text);
+        font-size: 11px;
+      }
+      #search-input::placeholder {
+        color: var(--muted);
+      }
+      #search-btn {
+        background: var(--accent);
+        color: var(--bg);
+        border: none;
+        border-radius: 4px;
+        padding: 4px 10px;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      #search-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
       #sidebar {
-        width: 360px;
+        width: 480px;
         background: var(--panel);
         border-left: 1px solid rgba(148, 163, 184, 0.2);
         padding: 16px;
         overflow: auto;
+        display: flex;
+        flex-direction: column;
       }
-      #sidebar h2 {
-        margin: 0 0 8px 0;
+      #sidebar-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+      }
+      #sidebar-header h2 {
+        margin: 0;
         font-size: 18px;
+      }
+      #sidebar-actions {
+        display: flex;
+        gap: 8px;
+      }
+      .sidebar-btn {
+        background: transparent;
+        color: var(--muted);
+        border: 1px solid rgba(148, 163, 184, 0.3);
+        border-radius: 6px;
+        padding: 4px 10px;
+        font-size: 11px;
+        cursor: pointer;
+      }
+      .sidebar-btn:hover {
+        border-color: var(--accent);
+        color: var(--accent);
       }
       #selection-count {
         color: var(--muted);
@@ -209,6 +299,8 @@ function generateHtml(dataJson: string): string {
         margin: 0;
         display: grid;
         gap: 12px;
+        flex: 1;
+        overflow: auto;
       }
       #selected-list li {
         padding: 10px;
@@ -216,15 +308,74 @@ function generateHtml(dataJson: string): string {
         border-radius: 8px;
         border: 1px solid rgba(148, 163, 184, 0.2);
       }
+      .item-header {
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+      }
       #selected-list a {
         color: var(--accent);
         text-decoration: none;
         font-weight: 600;
+        flex: 1;
+        word-break: break-word;
       }
       #selected-list p {
         margin: 6px 0 0 0;
         color: var(--muted);
         font-size: 12px;
+        word-break: break-word;
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .badge {
+        display: inline-block;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 9px;
+        font-weight: 600;
+        text-transform: uppercase;
+        flex-shrink: 0;
+      }
+      .badge-open {
+        background: rgba(110, 231, 183, 0.2);
+        color: var(--point-open);
+      }
+      .badge-closed {
+        background: rgba(167, 139, 250, 0.2);
+        color: var(--point-closed);
+      }
+      .badge-pr {
+        background: rgba(56, 189, 248, 0.2);
+        color: var(--accent);
+      }
+      .badge-issue {
+        background: rgba(251, 191, 36, 0.2);
+        color: #fbbf24;
+      }
+      .legend {
+        display: flex;
+        gap: 12px;
+        font-size: 10px;
+        margin-top: 4px;
+      }
+      .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .legend-shape {
+        width: 8px;
+        height: 8px;
+      }
+      .legend-circle {
+        border-radius: 50%;
+        background: var(--muted);
+      }
+      .legend-square {
+        background: var(--muted);
       }
     </style>
   </head>
@@ -235,19 +386,38 @@ function generateHtml(dataJson: string): string {
         <div id="hud">
           <div id="hud-row">
             <div id="hud-mode">Mode: 2D</div>
-            <button id="toggle-mode" type="button">Toggle 3D</button>
+            <button id="toggle-mode" class="hud-btn" type="button">Toggle 3D</button>
           </div>
-          <div id="hud-instructions">
+          <div id="filters">
+            <label><input type="checkbox" id="filter-pr" checked> PRs</label>
+            <label><input type="checkbox" id="filter-issue" checked> Issues</label>
+            <label><input type="checkbox" id="filter-open" checked> Open</label>
+            <label><input type="checkbox" id="filter-closed" checked> Closed</label>
+          </div>
+          <div id="search-wrap">
+            <input type="text" id="search-input" placeholder="Semantic search..." />
+            <button id="search-btn" type="button">Search</button>
+          </div>
+          <div class="legend">
+            <span class="legend-item"><span class="legend-shape legend-circle"></span> PR</span>
+            <span class="legend-item"><span class="legend-shape legend-square"></span> Issue</span>
+          </div>
+          <div id="hud-instructions" style="margin-top: 8px;">
             <div id="hud-line-2d">2D: drag to pan, scroll to zoom</div>
             <div id="hud-line-3d">3D: drag to rotate, ctrl+drag to pan</div>
-            <div>Shift+drag to select, ctrl+drag to add</div>
-            <div>Click empty space to deselect</div>
+            <div>Shift+drag to select, ctrl+shift to add</div>
           </div>
           <div id="hud-count"></div>
         </div>
       </div>
       <aside id="sidebar">
-        <h2>Selection</h2>
+        <div id="sidebar-header">
+          <h2>Selection</h2>
+          <div id="sidebar-actions">
+            <button id="open-all-btn" class="sidebar-btn" type="button">Open All</button>
+            <button id="copy-btn" class="sidebar-btn" type="button">Copy</button>
+          </div>
+        </div>
         <div id="selection-count">0 selected</div>
         <ul id="selected-list"></ul>
       </aside>
@@ -263,12 +433,53 @@ function generateHtml(dataJson: string): string {
       const toggleMode = document.getElementById("toggle-mode");
       const hudLine2d = document.getElementById("hud-line-2d");
       const hudLine3d = document.getElementById("hud-line-3d");
+      const openAllBtn = document.getElementById("open-all-btn");
+      const copyBtn = document.getElementById("copy-btn");
+      const searchInput = document.getElementById("search-input");
+      const searchBtn = document.getElementById("search-btn");
+      const filterPr = document.getElementById("filter-pr");
+      const filterIssue = document.getElementById("filter-issue");
+      const filterOpen = document.getElementById("filter-open");
+      const filterClosed = document.getElementById("filter-closed");
+      
       const styles = getComputedStyle(document.documentElement);
       const colors = {
         point: styles.getPropertyValue("--point").trim() || "#e2e8f0",
+        pointOpen: styles.getPropertyValue("--point-open").trim() || "#6ee7b7",
+        pointClosed: styles.getPropertyValue("--point-closed").trim() || "#a78bfa",
         selected: styles.getPropertyValue("--selected").trim() || "#f59e0b",
         accent: styles.getPropertyValue("--accent").trim() || "#38bdf8",
         muted: styles.getPropertyValue("--muted").trim() || "#94a3b8"
+      };
+      
+      let apiKey = null;
+      
+      const hasStates = data.some(p => p.state);
+      const hasTypes = data.some(p => p.type);
+      const hasEmbeddings = data.some(p => p.embedding);
+      
+      if (!hasEmbeddings) {
+        document.getElementById("search-wrap").style.display = "none";
+      }
+      
+      const getPointColor = (point, isSelected) => {
+        if (isSelected) return colors.selected;
+        if (!hasStates) return colors.point;
+        if (point.state === "open") return colors.pointOpen;
+        if (point.state === "closed") return colors.pointClosed;
+        return colors.point;
+      };
+      
+      const isVisible = (point) => {
+        const typeOk = !hasTypes || 
+          (point.type === "pr" && filterPr.checked) || 
+          (point.type === "issue" && filterIssue.checked) ||
+          (!point.type);
+        const stateOk = !hasStates ||
+          (point.state === "open" && filterOpen.checked) ||
+          (point.state === "closed" && filterClosed.checked) ||
+          (!point.state);
+        return typeOk && stateOk;
       };
 
       const view2d = {
@@ -361,12 +572,28 @@ function generateHtml(dataJson: string): string {
         for (const index of list) {
           const item = data[index];
           const li = document.createElement("li");
+          const header = document.createElement("div");
+          header.className = "item-header";
           const link = document.createElement("a");
           link.href = item.url;
           link.target = "_blank";
           link.rel = "noreferrer";
-          link.textContent = item.title || item.url;
-          li.appendChild(link);
+          const num = item.number ? "#" + item.number + " " : "";
+          link.textContent = num + (item.title || item.url);
+          header.appendChild(link);
+          if (item.type) {
+            const typeBadge = document.createElement("span");
+            typeBadge.className = "badge badge-" + item.type;
+            typeBadge.textContent = item.type;
+            header.appendChild(typeBadge);
+          }
+          if (item.state) {
+            const stateBadge = document.createElement("span");
+            stateBadge.className = "badge badge-" + item.state;
+            stateBadge.textContent = item.state;
+            header.appendChild(stateBadge);
+          }
+          li.appendChild(header);
           if (item.body) {
             const snippet = document.createElement("p");
             snippet.textContent = item.body;
@@ -393,6 +620,7 @@ function generateHtml(dataJson: string): string {
           state.selected.clear();
         }
         for (let i = 0; i < data.length; i += 1) {
+          if (!isVisible(data[i])) continue;
           const screen = getScreenPoint(data[i]);
           if (screen.x >= left && screen.x <= right && screen.y >= top && screen.y <= bottom) {
             state.selected.add(i);
@@ -403,6 +631,7 @@ function generateHtml(dataJson: string): string {
 
       const hitTestPoint = (clickX, clickY, radius) => {
         for (let i = 0; i < data.length; i += 1) {
+          if (!isVisible(data[i])) continue;
           const screen = getScreenPoint(data[i]);
           const dx = screen.x - clickX;
           const dy = screen.y - clickY;
@@ -422,11 +651,18 @@ function generateHtml(dataJson: string): string {
           render();
         });
       };
+      
+      const drawSquare = (x, y, size) => {
+        ctx.fillRect(x - size, y - size, size * 2, size * 2);
+      };
 
       const render = () => {
         ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
         const projected = [];
+        let visibleCount = 0;
         for (let i = 0; i < data.length; i += 1) {
+          if (!isVisible(data[i])) continue;
+          visibleCount++;
           const screen = getScreenPoint(data[i]);
           projected.push({ index: i, screen });
         }
@@ -434,11 +670,17 @@ function generateHtml(dataJson: string): string {
           projected.sort((a, b) => a.screen.depth - b.screen.depth);
         }
         for (const item of projected) {
-          const radius = state.selected.has(item.index) ? 3.5 : 2;
-          ctx.beginPath();
-          ctx.fillStyle = state.selected.has(item.index) ? colors.selected : colors.point;
-          ctx.arc(item.screen.x, item.screen.y, radius, 0, Math.PI * 2);
-          ctx.fill();
+          const point = data[item.index];
+          const isSelected = state.selected.has(item.index);
+          const size = isSelected ? 4 : 2.5;
+          ctx.fillStyle = getPointColor(point, isSelected);
+          if (point.type === "issue") {
+            drawSquare(item.screen.x, item.screen.y, size);
+          } else {
+            ctx.beginPath();
+            ctx.arc(item.screen.x, item.screen.y, size, 0, Math.PI * 2);
+            ctx.fill();
+          }
         }
         if (state.selectRect) {
           const rect = state.selectRect;
@@ -452,19 +694,17 @@ function generateHtml(dataJson: string): string {
           ctx.strokeRect(left, top, right - left, bottom - top);
           ctx.setLineDash([]);
         }
-        hudCount.textContent = data.length + " PRs";
+        hudCount.textContent = visibleCount + " / " + data.length + " items";
       };
 
       canvas.addEventListener("mousedown", (event) => {
         if (event.button !== 0) return;
         const point = getCanvasPoint(event);
+        const ctrlOrMeta = event.ctrlKey || event.metaKey;
         
-        // Shift+drag: select (replace selection)
-        // Ctrl+drag in 2D: select (add to selection)
-        // Ctrl+drag in 3D: pan
         if (event.shiftKey) {
           state.selecting = true;
-          state.addToSelection = false;
+          state.addToSelection = ctrlOrMeta;
           state.selectRect = {
             x0: point.x,
             y0: point.y,
@@ -475,9 +715,8 @@ function generateHtml(dataJson: string): string {
           return;
         }
         
-        if (event.ctrlKey || event.metaKey) {
+        if (ctrlOrMeta) {
           if (state.mode === "2d") {
-            // Ctrl+drag in 2D: add to selection
             state.selecting = true;
             state.addToSelection = true;
             state.selectRect = {
@@ -489,7 +728,6 @@ function generateHtml(dataJson: string): string {
             scheduleRender();
             return;
           } else {
-            // Ctrl+drag in 3D: pan
             state.dragging = true;
             state.dragMode = "pan3d";
             state.dragStart = { x: point.x, y: point.y };
@@ -549,9 +787,10 @@ function generateHtml(dataJson: string): string {
           scheduleRender();
         }
         
-        // Click to deselect (if no drag and no selection and clicked empty space)
+        // Only deselect if click was on the canvas
+        if (event.target !== canvas) return;
+        
         if (!wasDragging && !wasSelecting) {
-          // This was a simple click
           const hitIndex = hitTestPoint(point.x, point.y, 8);
           if (hitIndex === -1) {
             state.selected.clear();
@@ -559,7 +798,6 @@ function generateHtml(dataJson: string): string {
             scheduleRender();
           }
         } else if (wasDragging && dragDist < 3) {
-          // Very short drag = click
           const hitIndex = hitTestPoint(point.x, point.y, 8);
           if (hitIndex === -1) {
             state.selected.clear();
@@ -575,6 +813,106 @@ function generateHtml(dataJson: string): string {
 
       toggleMode.addEventListener("click", () => {
         setMode(state.mode === "2d" ? "3d" : "2d");
+      });
+      
+      [filterPr, filterIssue, filterOpen, filterClosed].forEach(el => {
+        el.addEventListener("change", scheduleRender);
+      });
+      
+      openAllBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const selected = Array.from(state.selected);
+        for (const index of selected) {
+          window.open(data[index].url, "_blank");
+        }
+      });
+      
+      copyBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const selected = Array.from(state.selected);
+        const lines = selected.map(index => {
+          const item = data[index];
+          const num = item.number ? "#" + item.number : "";
+          const type = item.type ? "[" + item.type.toUpperCase() + "]" : "";
+          return type + " " + num + " " + item.title + "\\n" + item.url;
+        });
+        navigator.clipboard.writeText(lines.join("\\n\\n"));
+      });
+      
+      const doSearch = async () => {
+        const query = searchInput.value.trim();
+        if (!query) return;
+        
+        if (!apiKey) {
+          apiKey = prompt("Enter your OpenAI API key (session only, not stored):");
+          if (!apiKey) return;
+        }
+        
+        searchBtn.disabled = true;
+        searchBtn.textContent = "...";
+        
+        try {
+          const response = await fetch("https://api.openai.com/v1/embeddings", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer " + apiKey
+            },
+            body: JSON.stringify({
+              model: "text-embedding-3-small",
+              input: query
+            })
+          });
+          
+          if (!response.ok) {
+            const err = await response.text();
+            throw new Error(err);
+          }
+          
+          const result = await response.json();
+          const queryEmb = result.data[0].embedding;
+          
+          // Compute cosine similarity with all points
+          const similarities = data.map((point, index) => {
+            if (!point.embedding) return { index, sim: -1 };
+            let dot = 0, normA = 0, normB = 0;
+            for (let i = 0; i < queryEmb.length; i++) {
+              dot += queryEmb[i] * point.embedding[i];
+              normA += queryEmb[i] * queryEmb[i];
+              normB += point.embedding[i] * point.embedding[i];
+            }
+            const sim = dot / (Math.sqrt(normA) * Math.sqrt(normB));
+            return { index, sim };
+          });
+          
+          similarities.sort((a, b) => b.sim - a.sim);
+          
+          state.selected.clear();
+          const topN = Math.min(20, similarities.length);
+          for (let i = 0; i < topN; i++) {
+            if (similarities[i].sim > 0) {
+              state.selected.add(similarities[i].index);
+            }
+          }
+          
+          updateSidebar();
+          scheduleRender();
+        } catch (err) {
+          alert("Search failed: " + err.message);
+          apiKey = null;
+        } finally {
+          searchBtn.disabled = false;
+          searchBtn.textContent = "Search";
+        }
+      };
+      
+      searchBtn.addEventListener("click", doSearch);
+      searchInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") doSearch();
+      });
+
+      canvas.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
       });
 
       canvas.addEventListener("wheel", (event) => {
@@ -611,6 +949,7 @@ if (process.argv[1]?.endsWith("build.js") || process.argv[1]?.endsWith("build.ts
 		output: "triage.html",
 		neighbors: 15,
 		minDist: 0.1,
+		includeEmbeddings: false,
 	};
 
 	for (let i = 0; i < args.length; i += 1) {
@@ -623,6 +962,8 @@ if (process.argv[1]?.endsWith("build.js") || process.argv[1]?.endsWith("build.ts
 			options.neighbors = Number(args[++i]);
 		} else if (arg === "--min-dist") {
 			options.minDist = Number(args[++i]);
+		} else if (arg === "--search") {
+			options.includeEmbeddings = true;
 		}
 	}
 

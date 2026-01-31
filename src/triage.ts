@@ -7,8 +7,13 @@ import readline from "readline";
 import { type BuildOptions, build } from "./build.js";
 import { type EmbedOptions, embed } from "./embed.js";
 
+type ItemState = "open" | "closed" | "all";
+type ItemType = "pr" | "issue" | "all";
+
 interface TriageOptions {
 	repo: string | null;
+	state: ItemState;
+	type: ItemType;
 	output: string;
 	embeddings: string;
 	html: string;
@@ -18,6 +23,7 @@ interface TriageOptions {
 	bodyChars: number;
 	neighbors: number;
 	minDist: number;
+	search: boolean;
 }
 
 function parseRepo(repo: string): { owner: string; name: string } | null {
@@ -33,68 +39,91 @@ function parseRepo(repo: string): { owner: string; name: string } | null {
 	return null;
 }
 
-async function fetchPRs(owner: string, name: string, outputPath: string): Promise<number> {
-	const apiPath = `/repos/${owner}/${name}/pulls?state=open&per_page=100`;
+interface FetchResult {
+	total: number;
+	prs: number;
+	issues: number;
+}
 
+async function fetchItems(
+	owner: string,
+	name: string,
+	state: ItemState,
+	type: ItemType,
+	outputPath: string,
+): Promise<FetchResult> {
 	fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 
-	const gh = spawn(
-		"gh",
-		["api", "--paginate", apiPath, "--jq", ".[] | {url: .html_url, title: .title, body: .body}"],
-		{
+	const items: object[] = [];
+	let prCount = 0;
+	let issueCount = 0;
+
+	const fetchEndpoint = async (endpoint: string, itemType: "pr" | "issue") => {
+		const jqFilter =
+			itemType === "issue"
+				? '.[] | select(.pull_request == null) | {url: .html_url, number: .number, title: .title, body: .body, state: .state, type: "issue"}'
+				: '.[] | {url: .html_url, number: .number, title: .title, body: .body, state: .state, type: "pr"}';
+
+		const gh = spawn("gh", ["api", "--paginate", endpoint, "--jq", jqFilter], {
 			stdio: ["ignore", "pipe", "inherit"],
-		},
-	);
-
-	const outputStream = fs.createWriteStream(outputPath, { flags: "w" });
-	outputStream.write("[\n");
-	let first = true;
-	let fetched = 0;
-
-	const rl = readline.createInterface({
-		input: gh.stdout!,
-		crlfDelay: Number.POSITIVE_INFINITY,
-	});
-
-	const readPromise = (async () => {
-		for await (const line of rl) {
-			const trimmed = line.trim();
-			if (!trimmed) continue;
-			if (!first) outputStream.write(",\n");
-			outputStream.write(trimmed);
-			first = false;
-			fetched += 1;
-			if (fetched % 200 === 0) {
-				console.log(`Fetched ${fetched} PRs`);
-			}
-		}
-	})();
-
-	const exitPromise = new Promise<void>((resolve, reject) => {
-		gh.on("close", (code) => {
-			if (code === 0) resolve();
-			else reject(new Error(`gh api exited with code ${code}`));
 		});
-		gh.on("error", reject);
-	});
 
-	try {
+		const rl = readline.createInterface({
+			input: gh.stdout!,
+			crlfDelay: Number.POSITIVE_INFINITY,
+		});
+
+		const readPromise = (async () => {
+			for await (const line of rl) {
+				const trimmed = line.trim();
+				if (!trimmed) continue;
+				try {
+					const item = JSON.parse(trimmed);
+					items.push(item);
+					if (itemType === "pr") prCount++;
+					else issueCount++;
+					const total = prCount + issueCount;
+					if (total % 200 === 0) {
+						console.log(`Fetched ${prCount} PRs, ${issueCount} issues`);
+					}
+				} catch {
+					// skip invalid JSON
+				}
+			}
+		})();
+
+		const exitPromise = new Promise<void>((resolve, reject) => {
+			gh.on("close", (code) => {
+				if (code === 0) resolve();
+				else reject(new Error(`gh api ${endpoint} exited with code ${code}`));
+			});
+			gh.on("error", reject);
+		});
+
 		await Promise.all([readPromise, exitPromise]);
-	} catch (error) {
-		outputStream.end();
-		throw error;
+	};
+
+	if (type === "pr" || type === "all") {
+		const prEndpoint = `/repos/${owner}/${name}/pulls?state=${state}&per_page=100`;
+		await fetchEndpoint(prEndpoint, "pr");
 	}
 
-	outputStream.write("\n]\n");
-	outputStream.end();
+	if (type === "issue" || type === "all") {
+		const issueEndpoint = `/repos/${owner}/${name}/issues?state=${state}&per_page=100`;
+		await fetchEndpoint(issueEndpoint, "issue");
+	}
 
-	return fetched;
+	fs.writeFileSync(outputPath, JSON.stringify(items, null, 2));
+
+	return { total: items.length, prs: prCount, issues: issueCount };
 }
 
 async function main() {
 	const args = process.argv.slice(2);
 	const options: TriageOptions = {
 		repo: null,
+		state: "open",
+		type: "all",
 		output: "prs.json",
 		embeddings: "embeddings.jsonl",
 		html: "triage.html",
@@ -104,12 +133,27 @@ async function main() {
 		bodyChars: 2000,
 		neighbors: 15,
 		minDist: 0.1,
+		search: false,
 	};
 
 	for (let i = 0; i < args.length; i += 1) {
 		const arg = args[i];
 		if (arg === "--repo") {
 			options.repo = args[++i];
+		} else if (arg === "--state") {
+			const val = args[++i];
+			if (val !== "open" && val !== "closed" && val !== "all") {
+				console.error("--state must be open, closed, or all");
+				process.exit(1);
+			}
+			options.state = val;
+		} else if (arg === "--type") {
+			const val = args[++i];
+			if (val !== "pr" && val !== "issue" && val !== "all") {
+				console.error("--type must be pr, issue, or all");
+				process.exit(1);
+			}
+			options.type = val;
 		} else if (arg === "--output") {
 			options.output = args[++i];
 		} else if (arg === "--embeddings") {
@@ -128,6 +172,8 @@ async function main() {
 			options.neighbors = Number(args[++i]);
 		} else if (arg === "--min-dist") {
 			options.minDist = Number(args[++i]);
+		} else if (arg === "--search") {
+			options.search = true;
 		} else if (arg === "--help" || arg === "-h") {
 			console.log(`
 doppelgangers - Find duplicate PRs through embedding visualization
@@ -137,7 +183,9 @@ Usage:
 
 Options:
   --repo <url|owner/repo>   GitHub repository (required)
-  --output <path>           Output path for PRs JSON (default: prs.json)
+  --state <state>           Item state: open, closed, or all (default: open)
+  --type <type>             Item type: pr, issue, or all (default: all)
+  --output <path>           Output path for items JSON (default: prs.json)
   --embeddings <path>       Output path for embeddings (default: embeddings.jsonl)
   --html <path>             Output path for HTML viewer (default: triage.html)
   --model <model>           OpenAI embedding model (default: text-embedding-3-small)
@@ -146,6 +194,7 @@ Options:
   --body-chars <n>          Max chars for body snippet (default: 2000)
   --neighbors <n>           UMAP neighbors (default: 15)
   --min-dist <n>            UMAP min distance (default: 0.1)
+  --search                  Include embeddings for semantic search (increases file size)
 
 Environment:
   OPENAI_API_KEY            Required for embedding generation
@@ -166,11 +215,12 @@ Environment:
 	}
 
 	const { owner, name } = repoInfo;
-	console.log(`Fetching PRs for ${owner}/${name}`);
+	const typeLabel = options.type === "all" ? "PRs and issues" : options.type === "pr" ? "PRs" : "issues";
+	console.log(`Fetching ${options.state} ${typeLabel} for ${owner}/${name}`);
 
 	const outputPath = path.resolve(options.output);
-	const fetched = await fetchPRs(owner, name, outputPath);
-	console.log(`Wrote ${outputPath} (${fetched} PRs)`);
+	const result = await fetchItems(owner, name, options.state, options.type, outputPath);
+	console.log(`Wrote ${outputPath} (${result.prs} PRs, ${result.issues} issues)`);
 
 	const embedOptions: EmbedOptions = {
 		input: outputPath,
@@ -188,6 +238,7 @@ Environment:
 		output: path.resolve(options.html),
 		neighbors: options.neighbors,
 		minDist: options.minDist,
+		includeEmbeddings: options.search,
 	};
 	build(buildOptions);
 

@@ -12,16 +12,22 @@ export interface EmbedOptions {
 	resume: boolean;
 }
 
-interface PR {
+interface Item {
 	url: string;
+	number?: number;
 	title: string;
 	body: string | null;
+	state?: string;
+	type?: string;
 }
 
 interface EmbeddingRecord {
 	url: string;
+	number?: number;
 	title: string;
 	body: string;
+	state?: string;
+	type?: string;
 	embedding: number[];
 }
 
@@ -47,7 +53,7 @@ export async function embed(options: EmbedOptions): Promise<void> {
 	const inputPath = path.resolve(options.input);
 	const outputPath = path.resolve(options.output);
 
-	const pulls: PR[] = JSON.parse(fs.readFileSync(inputPath, "utf8"));
+	const items: Item[] = JSON.parse(fs.readFileSync(inputPath, "utf8"));
 
 	const existing = new Map<string, EmbeddingRecord>();
 	if (options.resume && fs.existsSync(outputPath)) {
@@ -68,13 +74,13 @@ export async function embed(options: EmbedOptions): Promise<void> {
 	fs.mkdirSync(outputDir, { recursive: true });
 	const outputStream = fs.createWriteStream(outputPath, { flags: options.resume ? "a" : "w" });
 
-	const pending = pulls.filter((pr) => pr?.url && !existing.has(pr.url));
+	const pending = items.filter((item) => item?.url && !existing.has(item.url));
 	const total = pending.length;
 	let processed = 0;
-	const skipped = pulls.length - pending.length;
+	const skipped = items.length - pending.length;
 
 	let batchInputs: string[] = [];
-	let batchMeta: { url: string; title: string; body: string }[] = [];
+	let batchMeta: { url: string; number?: number; title: string; body: string; state?: string; type?: string }[] = [];
 
 	const createEmbeddings = async (inputs: string[], attempt = 1): Promise<number[][]> => {
 		try {
@@ -99,29 +105,35 @@ export async function embed(options: EmbedOptions): Promise<void> {
 			const meta = batchMeta[i];
 			const record: EmbeddingRecord = {
 				url: meta.url,
+				number: meta.number,
 				title: meta.title,
 				body: meta.body,
+				state: meta.state,
+				type: meta.type,
 				embedding: embeddings[i],
 			};
 			outputStream.write(`${JSON.stringify(record)}\n`);
 			processed += 1;
 			if (processed % 50 === 0 || processed === total) {
-				console.log(`Embedded ${processed}/${total} PRs`);
+				console.log(`Embedded ${processed}/${total} items`);
 			}
 		}
 		batchInputs = [];
 		batchMeta = [];
 	};
 
-	for (const pr of pending) {
-		const title = pr.title || "";
-		const body = pr.body || "";
+	for (const item of pending) {
+		const title = item.title || "";
+		const body = item.body || "";
 		const text = buildText(title, body, options.maxChars);
-		batchInputs.push(text || title || pr.url);
+		batchInputs.push(text || title || item.url);
 		batchMeta.push({
-			url: pr.url,
+			url: item.url,
+			number: item.number,
 			title,
 			body: buildSnippet(body, options.bodyChars),
+			state: item.state,
+			type: item.type,
 		});
 		if (batchInputs.length >= options.batchSize) {
 			await flushBatch();
