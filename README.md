@@ -2,79 +2,62 @@
 
 Find duplicate issues and PRs through embedding visualization. Fetches issues/PRs from a GitHub repo, generates embeddings, and renders an interactive 2D/3D scatter plot where similar items cluster together.
 
+**Demos:** [openai/codex](https://mariozechner.at/uploads/codex.html) | [sst/opencode](https://mariozechner.at/uploads/opencode.html) | [openclaw/openclaw](https://mariozechner.at/uploads/openclaw.html)
+
 ## Install
 
 ```bash
 npm install -g doppelgangers
 ```
 
-Or run directly:
-
-```bash
-npx doppelgangers --repo owner/repo
-```
-
 ## Usage
 
 ```bash
 export OPENAI_API_KEY=...
-doppelgangers --repo https://github.com/facebook/react
+doppelgangers --repo facebook/react
 ```
 
 This will:
 1. Fetch all open issues and PRs from the repo
 2. Generate embeddings using OpenAI
-3. Project them into 2D and 3D using UMAP
+3. Project to 2D/3D using UMAP
 4. Output `triage.html` with an interactive viewer
 
 ## Options
 
-```
---repo <url|owner/repo>   GitHub repository (required)
---state <state>           Item state: open, closed, or all (default: open)
---type <type>             Item type: pr, issue, or all (default: all)
---output <path>           Output path for items JSON (default: prs.json)
---embeddings <path>       Output path for embeddings (default: embeddings.jsonl)
---html <path>             Output path for HTML viewer (default: triage.html)
---model <model>           OpenAI embedding model (default: text-embedding-3-small)
---batch <n>               Batch size for embeddings (default: 100)
---max-chars <n>           Max chars for embedding input (default: 4000)
---body-chars <n>          Max chars for body snippet (default: 2000)
---neighbors <n>           UMAP neighbors (default: 15)
---min-dist <n>            UMAP min distance (default: 0.1)
---search                  Include embeddings for semantic search (increases file size)
-```
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--repo <url\|owner/repo>` | GitHub repository (required) | |
+| `--state <state>` | `open`, `closed`, or `all` | `open` |
+| `--type <type>` | `pr`, `issue`, or `all` | `all` |
+| `--output <path>` | Items JSON path | `prs.json` |
+| `--embeddings <path>` | Embeddings path | `embeddings.jsonl` |
+| `--html <path>` | HTML viewer path | `triage.html` |
+| `--model <model>` | OpenAI embedding model | `text-embedding-3-small` |
+| `--batch <n>` | Batch size for embeddings | `100` |
+| `--max-chars <n>` | Max chars for embedding input | `4000` |
+| `--body-chars <n>` | Max chars for body snippet | `2000` |
+| `--neighbors <n>` | UMAP neighbors | `15` |
+| `--min-dist <n>` | UMAP min distance | `0.1` |
+| `--search` | Include embeddings for semantic search | `false` |
 
-## Viewer Features
+## Viewer
 
-**Filtering:**
-- Toggle PRs and Issues visibility
-- Toggle Open and Closed items
-- Semantic search (requires `--search` flag, prompts for API key)
+**Controls:**
+- **2D:** Drag to pan, scroll to zoom
+- **3D:** Drag to rotate, Ctrl/Cmd+drag to pan, scroll to zoom
+- **Select:** Shift+drag (Ctrl/Cmd+Shift to add to selection)
+- **Deselect:** Click empty space
 
-**Selection:**
-- Shift+drag to select (replaces selection)
-- Ctrl/Cmd+Shift+drag to select (adds to selection)
-- Click empty space to deselect
-
-**Sidebar Actions:**
-- "Open All" opens all selected items in new tabs (allow popups in browser)
-- "Copy" copies selection as formatted list to clipboard
-
-**2D Mode:**
-- Drag to pan
-- Scroll to zoom
-- Ctrl/Cmd+drag to select (adds to selection)
-
-**3D Mode:**
-- Drag to rotate
-- Ctrl/Cmd+drag to pan
-- Scroll to zoom
+**Sidebar:**
+- "Open All" opens selected items in new tabs (allow popups)
+- "Copy" copies selection as formatted list
 
 **Visual Encoding:**
-- Circles = PRs, Diamonds = Issues
-- Green = Open, Purple = Closed
-- Orange = Selected
+- Filled circles = PRs, Hollow rings = Issues
+- Green = Open, Purple = Closed, Orange = Selected
+
+**Filters:** Toggle PRs/Issues and Open/Closed visibility
 
 ## Requirements
 
